@@ -15,20 +15,29 @@ nav button{background:none}.fr{display:flex;justify-content:space-between;align-
 <nav><button onclick="go('home')">Home</button><button onclick="go('up')">+ Upload</button><button onclick="go('fr')">Friends</button><button onclick="go('me')">You</button></nav>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,updateProfile} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import {getFirestore,collection,addDoc,setDoc,doc,getDocs,query,orderBy,limit,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 // PASTE your Firebase config here (Project settings > Your apps > Web app)
 const cfg={apiKey:"AIzaSyC4Dcte_zk_gKw3LOjCpii0NwA7-NeUzAQ",authDomain:"tube-81a6a.firebaseapp.com",projectId:"tube-81a6a",storageBucket:"tube-81a6a.firebasestorage.app",messagingSenderId:"290792359535",appId:"1:290792359535:web:6b6686500dbce511822f9a"};
 const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app);
 const MAX=35*60,MAXB=100*1024*1024,$=id=>document.getElementById(id);let user=null;
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-onAuthStateChanged(auth,async u=>{user=u;if(u)await setDoc(doc(db,'users',u.uid),{name:u.displayName,photo:u.photoURL},{merge:true});go('home')});
-window.login=()=>signInWithPopup(auth,new GoogleAuthProvider());
+onAuthStateChanged(auth,async u=>{user=u;if(u)await setDoc(doc(db,'users',u.uid),{name:nm(u),photo:u.photoURL||''},{merge:true});go('home')});
+const nm=u=>u.displayName||(u.email||'User').split('@')[0];
+let mode='signup';
+const IN='width:100%;padding:12px;border:1px solid #ccc;border-radius:10px;margin-bottom:10px;font:inherit;box-sizing:border-box';
+const E={'auth/email-already-in-use':'This email already has an account. Tap Log in.','auth/invalid-credential':'Wrong email or password.','auth/wrong-password':'Wrong email or password.','auth/user-not-found':'No account with this email. Tap Sign up.','auth/weak-password':'Password must be at least 6 characters.','auth/invalid-email':'Enter a valid email.','auth/operation-not-allowed':'This login method is not turned on in Firebase.','auth/unauthorized-domain':'This website is not added in Firebase Authorized domains.','auth/popup-blocked':'Popup was blocked. Allow popups and try again.','auth/popup-closed-by-user':'Login window was closed.'};
+const msg=c=>E[c]||('Error: '+c);
+window.setMode=m=>{mode=m;go('home')};
+function authView(){const s=mode=='signup';return '<div style="padding:30px 16px;max-width:400px;margin:auto"><h2 style="text-align:center">'+(s?'Create your account':'Log in')+'</h2><p class="s" style="text-align:center">Share videos. Earn 60% of ad money.</p>'+(s?'<input id="nm" placeholder="Your name" style="'+IN+'">':'')+'<input id="em" type="email" placeholder="Email" style="'+IN+'"><input id="pw" type="password" placeholder="Password (6+ characters)" style="'+IN+'"><button class="on" style="width:100%;padding:12px" onclick="emailAuth()">'+(s?'Sign up':'Log in')+'</button><p class="s" style="text-align:center;margin:14px 0">or</p><button style="width:100%;padding:12px" onclick="login()">Continue with Google</button><p class="s" style="text-align:center;margin-top:16px">'+(s?'Already have an account? <a href="#" onclick="setMode(\'login\');return false">Log in</a>':'New here? <a href="#" onclick="setMode(\'signup\');return false">Sign up</a>')+'</p></div>'}
+window.emailAuth=async()=>{const e=$('em').value.trim(),p=$('pw').value;if(e.indexOf('@')<1){alert('Enter a valid email.');return}if(p.length<6){alert('Password must be at least 6 characters.');return}
+ try{if(mode=='signup'){const c=await createUserWithEmailAndPassword(auth,e,p);const n=$('nm')&&$('nm').value.trim();if(n){await updateProfile(c.user,{displayName:n});await setDoc(doc(db,'users',c.user.uid),{name:n},{merge:true})}go('home')}else await signInWithEmailAndPassword(auth,e,p)}catch(x){alert(msg(x.code))}};
+window.login=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(x=>alert(msg(x.code)));
 window.logout=()=>signOut(auth);
 window.addFr=async(to,b)=>{await addDoc(collection(db,'friendRequests'),{from:user.uid,to,createdAt:serverTimestamp()});b.textContent='Requested'};
 window.go=async t=>{
  const a=$('app');
- if(!user){a.innerHTML='<div style="padding:40px 16px;text-align:center"><h2>Welcome to Tube</h2><p>Share videos. Earn 60% of ad money.</p><button class="on" onclick="login()">Continue with Google</button></div>';return}
+ if(!user){a.innerHTML=authView();return}
  if(t=='up'){$('file').click();return}
  if(t=='home'){
   a.innerHTML='<p class="m s">Loading…</p>';
@@ -39,7 +48,7 @@ window.go=async t=>{
   const s=await getDocs(collection(db,'users'));let h='<h3 class="m">People</h3>';
   s.forEach(d=>{if(d.id==user.uid)return;h+='<div class="fr"><span>'+esc(d.data().name||'User')+'</span><button class="on" onclick="addFr(\''+d.id+'\',this)">Add friend</button></div>'});
   a.innerHTML=h;return}
- a.innerHTML='<div class="m"><img src="'+esc(user.photoURL)+'" width="72" style="border-radius:50%"><h3>'+esc(user.displayName)+'</h3><p class="s">Videos up to 100 MB. Once your channel is monetized (500 followers and 5,000 views in 90 days) you earn 60% of ad money on your videos. Tube keeps 40%.</p><button onclick="logout()">Sign out</button></div>'};
+ a.innerHTML='<div class="m">'+(user.photoURL?'<img src="'+esc(user.photoURL)+'" width="72" style="border-radius:50%">':'')+'<h3>'+esc(nm(user))+'</h3><p class="s">Videos up to 100 MB. Once your channel is monetized (500 followers and 5,000 views in 90 days) you earn 60% of ad money on your videos. Tube keeps 40%.</p><button onclick="logout()">Sign out</button></div>'};
 $('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
  const v=document.createElement('video');v.preload='metadata';
  v.onloadedmetadata=()=>{if(f.size>MAXB)alert('Video is bigger than 100 MB. Choose a smaller one.');else if(v.duration>MAX)alert('Video is longer than 35 minutes');else send(f)};v.src=URL.createObjectURL(f)};
@@ -51,7 +60,7 @@ function send(f){
  x.onerror=()=>alert('Upload failed. Check your internet.');
  x.onload=async()=>{let r={};try{r=JSON.parse(x.responseText)}catch(e){}
   if(!r.secure_url){alert('Upload failed: '+((r.error&&r.error.message)||x.status));go('home');return}
-  await addDoc(collection(db,'videos'),{title:f.name.replace(/\.[^.]+$/,''),url:r.secure_url,uid:user.uid,name:user.displayName,createdAt:serverTimestamp()});go('home')};
+  await addDoc(collection(db,'videos'),{title:f.name.replace(/\.[^.]+$/,''),url:r.secure_url,uid:user.uid,name:nm(user),createdAt:serverTimestamp()});go('home')};
  x.send(d)}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 </script></body></html>
