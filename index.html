@@ -9,21 +9,32 @@ video{width:100%;aspect-ratio:16/9;background:#000}.m{padding:8px 12px 16px}.s{f
 .ad{margin:8px 12px 16px;padding:14px;background:#fff3d6;border-radius:10px;font-size:13px}
 nav{position:fixed;bottom:0;left:0;right:0;max-width:560px;margin:auto;display:flex;justify-content:space-around;background:#fff;border-top:1px solid #ddd;padding:8px 0}
 nav button{background:none}.fr{display:flex;justify-content:space-between;align-items:center;padding:8px 12px}
+.cover{height:140px;background:#e5322d center/cover no-repeat;position:relative}
+.cover button{position:absolute;right:10px;bottom:10px;font-size:12px;padding:6px 12px}
+.av{width:84px;height:84px;border-radius:50%;border:4px solid #fff;background:#ccc center/cover;margin-top:-46px;position:relative}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.card{margin:12px;padding:14px;border:1px solid #e3e3e3;border-radius:12px}
+.card h4{margin:0 0 10px}
+.tag{display:inline-block;font-size:12px;padding:3px 10px;border-radius:12px;background:#eee}.tag.g{background:#d8f3dc;color:#1b5e20}
+.mv{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-top:1px solid #eee;font-size:14px}
 </style></head><body>
 <header><i>▶</i>Tube</header><main id="app"></main>
 <input type="file" id="file" accept="video/*" hidden>
+<input type="file" id="pic" accept="image/*" hidden>
+<div id="gt" style="display:none"></div>
 <nav><button onclick="go('home')">Home</button><button onclick="go('up')">+ Upload</button><button onclick="go('fr')">Friends</button><button onclick="go('me')">You</button></nav>
+<script>function gtInit(){new google.translate.TranslateElement({pageLanguage:'en',autoDisplay:false},'gt')}</script>
+<script src="https://translate.google.com/translate_a/element.js?cb=gtInit" async></script>
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,updateProfile} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,addDoc,setDoc,doc,getDocs,query,orderBy,limit,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
-// PASTE your Firebase config here (Project settings > Your apps > Web app)
+import {getFirestore,collection,addDoc,setDoc,doc,getDoc,getDocs,deleteDoc,query,where,orderBy,limit,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyC4Dcte_zk_gKw3LOjCpii0NwA7-NeUzAQ",authDomain:"tube-81a6a.firebaseapp.com",projectId:"tube-81a6a",storageBucket:"tube-81a6a.firebasestorage.app",messagingSenderId:"290792359535",appId:"1:290792359535:web:6b6686500dbce511822f9a"};
 const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app);
-const MAX=35*60,MAXB=100*1024*1024,$=id=>document.getElementById(id);let user=null;
+const MAX=35*60,MAXB=100*1024*1024,$=id=>document.getElementById(id);let user=null,me={},edit=false,pk='';
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-onAuthStateChanged(auth,async u=>{user=u;if(u)await setDoc(doc(db,'users',u.uid),{name:nm(u),photo:u.photoURL||''},{merge:true});go('home')});
 const nm=u=>u.displayName||(u.email||'User').split('@')[0];
+onAuthStateChanged(auth,async u=>{user=u;if(u){try{const r=doc(db,'users',u.uid),s=await getDoc(r);me=s.exists()?s.data():{};if(!s.exists()){me={name:nm(u),photo:u.photoURL||''};await setDoc(r,me,{merge:true})}}catch(e){}}go('home')});
 let mode='signup';
 const IN='width:100%;padding:12px;border:1px solid #ccc;border-radius:10px;margin-bottom:10px;font:inherit;box-sizing:border-box';
 const E={'auth/email-already-in-use':'This email already has an account. Tap Log in.','auth/invalid-credential':'Wrong email or password.','auth/wrong-password':'Wrong email or password.','auth/user-not-found':'No account with this email. Tap Sign up.','auth/weak-password':'Password must be at least 6 characters.','auth/invalid-email':'Enter a valid email.','auth/operation-not-allowed':'This login method is not turned on in Firebase.','auth/unauthorized-domain':'This website is not added in Firebase Authorized domains.','auth/popup-blocked':'Popup was blocked. Allow popups and try again.','auth/popup-closed-by-user':'Login window was closed.'};
@@ -35,24 +46,69 @@ window.emailAuth=async()=>{const e=$('em').value.trim(),p=$('pw').value;if(e.ind
 window.login=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(x=>alert(msg(x.code)));
 window.logout=()=>signOut(auth);
 window.addFr=async(to,b)=>{await addDoc(collection(db,'friendRequests'),{from:user.uid,to,createdAt:serverTimestamp()});b.textContent='Requested'};
+
+let deferred=null;
+window.addEventListener('beforeinstallprompt',e=>{e.preventDefault();deferred=e});
+window.install=()=>{if(deferred){deferred.prompt();deferred=null}else alert('Open the browser menu and tap Add to Home screen.')};
+
+// ---- profile ----
+function pic(file,w,h,cb){const im=new Image();im.onload=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;const r=Math.max(w/im.width,h/im.height),dw=im.width*r,dh=im.height*r;c.getContext('2d').drawImage(im,(w-dw)/2,(h-dh)/2,dw,dh);cb(c.toDataURL('image/jpeg',.75))};im.src=URL.createObjectURL(file)}
+window.pick=k=>{pk=k;$('pic').click()};
+$('pic').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
+ const cov=pk=='cover';
+ pic(f,cov?900:240,cov?300:240,async d=>{try{const u=cov?{cover:d}:{photo:d};await setDoc(doc(db,'users',user.uid),u,{merge:true});Object.assign(me,u);go('me')}catch(x){alert('Could not save picture: '+(x.code||x))}})};
+window.editOn=v=>{edit=v;go('me')};
+window.saveProfile=async()=>{const u={name:$('pn').value.trim()||nm(user),bio:$('pb').value.trim().slice(0,160)};
+ try{await setDoc(doc(db,'users',user.uid),u,{merge:true});Object.assign(me,u);edit=false;go('me')}catch(x){alert('Could not save: '+(x.code||x))}};
+window.delVid=async id=>{if(!confirm('Delete this video?'))return;try{await deleteDoc(doc(db,'videos',id));go('me')}catch(x){alert('Could not delete: '+(x.code||x))}};
+async function profile(a){
+ a.innerHTML='<p class="m s">Loading…</p>';
+ let vs=[];try{const s=await getDocs(query(collection(db,'videos'),where('uid','==',user.uid)));s.forEach(d=>vs.push({id:d.id,...d.data()}))}catch(x){}
+ const photo=me.photo||user.photoURL||'',name=me.name||nm(user);
+ let h='<div class="cover"'+(me.cover?' style="background-image:url('+esc(me.cover)+')"':'')+'><button onclick="pick(\'cover\')">Change cover</button></div>';
+ h+='<div class="m"><div class="av"'+(photo?' style="background-image:url('+esc(photo)+')"':'')+' onclick="pick(\'photo\')"></div>';
+ if(edit){h+='<input id="pn" value="'+esc(name)+'" placeholder="Your name" style="'+IN+';margin-top:10px"><textarea id="pb" placeholder="About you (160 characters)" style="'+IN+';height:70px">'+esc(me.bio||'')+'</textarea><div class="row"><button class="on" onclick="saveProfile()">Save</button><button onclick="editOn(false)">Cancel</button></div><p class="s">Tap your round picture to change it.</p>'}
+ else{h+='<h3 style="margin:10px 0 2px">'+esc(name)+'</h3><div class="s">'+esc(user.email||'')+'</div>'+(me.bio?'<p style="margin:8px 0">'+esc(me.bio)+'</p>':'')+'<div class="row"><span class="tag">'+vs.length+' videos</span><span class="tag'+(me.monetized?' g':'')+'">'+(me.monetized?'Monetized':'Not monetized')+'</span></div><div class="row"><button class="on" onclick="editOn(true)">Edit profile</button><button onclick="go(\'settings\')">Settings</button></div>'}
+ h+='</div><h4 class="m" style="margin:0">My videos</h4>';
+ vs.sort((x,y)=>(y.createdAt?.seconds||0)-(x.createdAt?.seconds||0));
+ h+=vs.length?vs.map(v=>'<div class="mv"><span>'+esc(v.title)+'</span><button onclick="delVid(\''+v.id+'\')">Delete</button></div>').join(''):'<p class="m s">No videos yet. Tap Upload.</p>';
+ a.innerHTML=h}
+
+// ---- settings ----
+window.savePay=async()=>{const d={easypaisa:$('ep').value.trim(),jazzcash:$('jc').value.trim(),bank:$('bk').value.trim(),title:$('bt').value.trim(),account:$('ba').value.trim()};
+ try{await setDoc(doc(db,'users',user.uid,'private','payout'),d);alert('Saved')}catch(x){alert('Could not save payment details. Add the Firestore rule for private data first.')}};
+window.monetize=async()=>{try{await setDoc(doc(db,'users',user.uid),{monetized:true,monetizeRequestedAt:serverTimestamp()},{merge:true});me.monetized=true;go('settings')}catch(x){alert('Could not send request: '+(x.code||x))}};
+async function settings(a){
+ let p={};try{const s=await getDoc(doc(db,'users',user.uid,'private','payout'));if(s.exists())p=s.data()}catch(x){}
+ const f=(id,l,v,ph)=>'<label class="s">'+l+'</label><input id="'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="'+IN+'">';
+ a.innerHTML='<div class="m"><button onclick="go(\'me\')">← Back</button><h3>Settings</h3></div>'
+ +'<div class="card"><h4>Language</h4><div id="gtslot"></div><p class="s">Choose any language. Tube translates itself.</p></div>'
+ +'<div class="card"><h4>Payment details</h4>'+f('ep','Easypaisa number',p.easypaisa,'03XX XXXXXXX')+f('jc','JazzCash number',p.jazzcash,'03XX XXXXXXX')+f('bk','Bank name (e.g. Meezan Bank)',p.bank)+f('bt','Account title',p.title)+f('ba','Account number / IBAN',p.account)+'<button class="on" onclick="savePay()">Save payment details</button></div>'
+ +'<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':'<p class="s">Request monetization to start earning 60% of ad money on your videos. Tube keeps 40%.</p><button class="on" onclick="monetize()">Request monetization</button>')+'</div>'
+ +'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="logout()">Sign out</button></div></div>';
+ const g=$('gt');$('gtslot').appendChild(g);g.style.display='block'}
+
 window.go=async t=>{
- const a=$('app');
+ const a=$('app'),g=$('gt');if(g.parentNode!==document.body){g.style.display='none';document.body.appendChild(g)}
  if(!user){a.innerHTML=authView();return}
  if(t=='up'){$('file').click();return}
+ if(t!='me')edit=false;
  if(t=='home'){
   a.innerHTML='<p class="m s">Loading…</p>';
   const s=await getDocs(query(collection(db,'videos'),orderBy('createdAt','desc'),limit(30)));let h='',i=0;
   s.forEach(d=>{const v=d.data();h+='<div><video src="'+esc(v.url)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'</div></div></div>';if(++i%3==0)h+='<div class="ad">Ad space: paste your AdSense or AdMob code here</div>'});
   a.innerHTML=h||'<p class="m">No videos yet. Tap Upload.</p>';return}
  if(t=='fr'){
-  const s=await getDocs(collection(db,'users'));let h='<h3 class="m">People</h3>';
+  const s=await getDocs(query(collection(db,'users'),limit(50)));let h='<h3 class="m">People</h3>';
   s.forEach(d=>{if(d.id==user.uid)return;h+='<div class="fr"><span>'+esc(d.data().name||'User')+'</span><button class="on" onclick="addFr(\''+d.id+'\',this)">Add friend</button></div>'});
   a.innerHTML=h;return}
- a.innerHTML='<div class="m">'+(user.photoURL?'<img src="'+esc(user.photoURL)+'" width="72" style="border-radius:50%">':'')+'<h3>'+esc(nm(user))+'</h3><p class="s">Videos up to 100 MB. Once your channel is monetized (500 followers and 5,000 views in 90 days) you earn 60% of ad money on your videos. Tube keeps 40%.</p><button onclick="logout()">Sign out</button></div>'};
+ if(t=='settings'){await settings(a);return}
+ await profile(a)};
 $('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
  const v=document.createElement('video');v.preload='metadata';
  v.onloadedmetadata=()=>{if(f.size>MAXB)alert('Video is bigger than 100 MB. Choose a smaller one.');else if(v.duration>MAX)alert('Video is longer than 35 minutes');else send(f)};v.src=URL.createObjectURL(f)};
 function send(f){
+ const def=f.name.replace(/\.[^.]+$/,''),title=(prompt('Video title',def)||def).trim().slice(0,100)||def;
  const x=new XMLHttpRequest(),d=new FormData();
  d.append('file',f);d.append('upload_preset','tube_videos');
  x.open('POST','https://api.cloudinary.com/v1_1/qpaa2pyv/video/upload');
@@ -60,7 +116,7 @@ function send(f){
  x.onerror=()=>alert('Upload failed. Check your internet.');
  x.onload=async()=>{let r={};try{r=JSON.parse(x.responseText)}catch(e){}
   if(!r.secure_url){alert('Upload failed: '+((r.error&&r.error.message)||x.status));go('home');return}
-  await addDoc(collection(db,'videos'),{title:f.name.replace(/\.[^.]+$/,''),url:r.secure_url,uid:user.uid,name:nm(user),createdAt:serverTimestamp()});go('home')};
+  await addDoc(collection(db,'videos'),{title,url:r.secure_url,uid:user.uid,name:me.name||nm(user),createdAt:serverTimestamp()});go('home')};
  x.send(d)}
 if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js');
 </script></body></html>
