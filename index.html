@@ -29,7 +29,7 @@ nav button{background:none}.fr{display:flex;justify-content:space-between;align-
 <script type="module">
 import {initializeApp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import {getAuth,GoogleAuthProvider,signInWithPopup,signOut,onAuthStateChanged,createUserWithEmailAndPassword,signInWithEmailAndPassword,updateProfile} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import {getFirestore,collection,addDoc,setDoc,doc,getDoc,getDocs,deleteDoc,query,where,orderBy,limit,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import {getFirestore,collection,addDoc,setDoc,doc,getDoc,getDocs,deleteDoc,getCountFromServer,query,where,orderBy,limit,serverTimestamp} from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 const cfg={apiKey:"AIzaSyC4Dcte_zk_gKw3LOjCpii0NwA7-NeUzAQ",authDomain:"tube-81a6a.firebaseapp.com",projectId:"tube-81a6a",storageBucket:"tube-81a6a.firebasestorage.app",messagingSenderId:"290792359535",appId:"1:290792359535:web:6b6686500dbce511822f9a"};
 const app=initializeApp(cfg),auth=getAuth(app),db=getFirestore(app);
 const MAX=35*60,MAXB=100*1024*1024,$=id=>document.getElementById(id);let user=null,me={},edit=false,pk='';
@@ -122,6 +122,30 @@ function terms(a){
  +'<p><b>Free movies and cartoons</b></p><p class="s">Only public domain and Creative Commons films are shown, with their license written under each title.</p>'
  +'<p><b>Privacy</b></p><p class="s">Your payment details are visible only to you and the Tube owner. Ads shown in Tube may use cookies.</p></div>'}
 
+
+// ---- likes, views, comments, share ----
+const seen=new Set();
+const vidHtml=(id,v)=>'<div id="v'+id+'"><video src="'+esc(v.url)+'" controls playsinline preload="metadata" onplay="viewed(\''+id+'\')"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'<span id="vw'+id+'"></span></div><div class="row"><button id="lk'+id+'" data-n="0" data-on="0" onclick="like(\''+id+'\')">Like</button><button onclick="cm(\''+id+'\')">Comments</button><button onclick="shr(\''+id+'\')">Share</button><button class="rp" onclick="rep(\''+id+'\')">Report</button></div><div id="cm'+id+'" hidden></div></div></div>';
+function paintLike(id){const b=$('lk'+id);if(!b)return;const on=b.dataset.on=='1';b.textContent=(on?'Liked ':'Like ')+(b.dataset.n||0);b.className=on?'on':''}
+function stats(ids){ids.forEach(async id=>{try{
+ const [l,w,m]=await Promise.all([getCountFromServer(collection(db,'videos',id,'likes')),getCountFromServer(collection(db,'videos',id,'views')),getDoc(doc(db,'videos',id,'likes',user.uid))]);
+ const b=$('lk'+id);if(b){b.dataset.n=l.data().count;b.dataset.on=m.exists()?1:0;paintLike(id)}
+ const w2=$('vw'+id);if(w2)w2.textContent=' - '+w.data().count+' views'}catch(e){}})}
+window.viewed=async id=>{if(seen.has(id))return;seen.add(id);try{await setDoc(doc(db,'videos',id,'views',user.uid),{at:serverTimestamp()})}catch(e){}};
+window.like=async id=>{const b=$('lk'+id);let n=+b.dataset.n||0;const on=b.dataset.on=='1',r=doc(db,'videos',id,'likes',user.uid);
+ try{if(on){await deleteDoc(r);n--}else{await setDoc(r,{at:serverTimestamp()});n++}b.dataset.n=n;b.dataset.on=on?0:1;paintLike(id)}catch(x){alert('Could not like: '+(x.code||x))}};
+window.shr=async id=>{const u=location.origin+location.pathname+'?v='+id;try{if(navigator.share)await navigator.share({title:'Tube',url:u});else{await navigator.clipboard.writeText(u);alert('Link copied')}}catch(e){}};
+async function loadCm(id){const p=$('cm'+id);
+ let h='<div class="row"><input id="ci'+id+'" maxlength="300" placeholder="Write a comment" style="flex:1;padding:8px;border:1px solid #ccc;border-radius:10px;font:inherit"><button class="on" onclick="postCm(\''+id+'\')">Post</button></div>';
+ try{const q=await getDocs(query(collection(db,'videos',id,'comments'),orderBy('createdAt','desc'),limit(30)));
+  q.forEach(d=>{const c=d.data();h+='<div class="mv"><span><b>'+esc(c.name)+'</b> '+esc(c.text)+'</span>'+(c.uid==user.uid?'<button class="rp" onclick="delCm(\''+id+'\',\''+d.id+'\')">Delete</button>':'')+'</div>'});
+  if(q.empty)h+='<p class="s">No comments yet.</p>'}catch(x){h+='<p class="s">Could not load comments.</p>'}
+ p.innerHTML=h}
+window.cm=async id=>{const p=$('cm'+id);if(!p.hidden){p.hidden=true;return}p.hidden=false;p.innerHTML='<p class="s">Loading…</p>';await loadCm(id)};
+window.postCm=async id=>{const t=$('ci'+id).value.trim();if(!t)return;
+ try{await addDoc(collection(db,'videos',id,'comments'),{uid:user.uid,name:me.name||nm(user),text:t.slice(0,300),createdAt:serverTimestamp()});await loadCm(id)}catch(x){alert('Could not post: '+(x.code||x))}};
+window.delCm=async(id,c)=>{try{await deleteDoc(doc(db,'videos',id,'comments',c));await loadCm(id)}catch(x){alert('Could not delete: '+(x.code||x))}};
+
 window.go=async t=>{
  const a=$('app'),g=$('gt');if(g.parentNode!==document.body){g.style.display='none';document.body.appendChild(g)}
  if(!user){a.innerHTML=authView();return}
@@ -129,9 +153,11 @@ window.go=async t=>{
  if(t!='me')edit=false;
  if(t=='home'){
   a.innerHTML='<p class="m s">Loading…</p>';
-  const s=await getDocs(query(collection(db,'videos'),orderBy('createdAt','desc'),limit(30)));let h='',i=0;
-  s.forEach(d=>{const v=d.data();h+='<div><video src="'+esc(v.url)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'</div><button class="rp" onclick="rep(\''+d.id+'\')">Report</button></div></div>';if(++i%3==0)h+='<div class="ad">Ad space: paste your AdSense or AdMob code here</div>'});
-  a.innerHTML=h||'<p class="m">No videos yet. Tap Upload.</p>';return}
+  const qv=new URLSearchParams(location.search).get('v');
+  const s=await getDocs(query(collection(db,'videos'),orderBy('createdAt','desc'),limit(30)));let h='',i=0,ids=[];
+  if(qv){try{const one=await getDoc(doc(db,'videos',qv));if(one.exists()){h+=vidHtml(one.id,one.data());ids.push(one.id)}}catch(e){}}
+  s.forEach(d=>{if(d.id==qv)return;h+=vidHtml(d.id,d.data());ids.push(d.id);if(++i%3==0)h+='<div class="ad">Ad space: paste your AdSense or AdMob code here</div>'});
+  a.innerHTML=h||'<p class="m">No videos yet. Tap Upload.</p>';stats(ids);return}
  if(t=='fr'){
   const s=await getDocs(query(collection(db,'users'),limit(50)));let h='<h3 class="m">People</h3>';
   s.forEach(d=>{if(d.id==user.uid)return;h+='<div class="fr"><span>'+esc(d.data().name||'User')+'</span><button class="on" onclick="addFr(\''+d.id+'\',this)">Add friend</button></div>'});
