@@ -16,13 +16,14 @@ nav button{background:none}.fr{display:flex;justify-content:space-between;align-
 .card{margin:12px;padding:14px;border:1px solid #e3e3e3;border-radius:12px}
 .card h4{margin:0 0 10px}
 .tag{display:inline-block;font-size:12px;padding:3px 10px;border-radius:12px;background:#eee}.tag.g{background:#d8f3dc;color:#1b5e20}
+.rp{font-size:12px;padding:4px 10px;margin-top:6px}.chips{display:flex;gap:8px;padding:8px 12px}
 .mv{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-top:1px solid #eee;font-size:14px}
 </style></head><body>
 <header><i>▶</i>Tube</header><main id="app"></main>
 <input type="file" id="file" accept="video/*" hidden>
 <input type="file" id="pic" accept="image/*" hidden>
 <div id="gt" style="display:none"></div>
-<nav><button onclick="go('home')">Home</button><button onclick="go('up')">+ Upload</button><button onclick="go('fr')">Friends</button><button onclick="go('me')">You</button></nav>
+<nav><button onclick="go('home')">Home</button><button onclick="go('mv')">Movies</button><button onclick="go('up')">+ Upload</button><button onclick="go('fr')">Friends</button><button onclick="go('me')">You</button></nav>
 <script>function gtInit(){new google.translate.TranslateElement({pageLanguage:'en',autoDisplay:false},'gt')}</script>
 <script src="https://translate.google.com/translate_a/element.js?cb=gtInit" async></script>
 <script type="module">
@@ -77,16 +78,49 @@ async function profile(a){
 // ---- settings ----
 window.savePay=async()=>{const d={easypaisa:$('ep').value.trim(),jazzcash:$('jc').value.trim(),bank:$('bk').value.trim(),title:$('bt').value.trim(),account:$('ba').value.trim()};
  try{await setDoc(doc(db,'users',user.uid,'private','payout'),d);alert('Saved')}catch(x){alert('Could not save payment details. Add the Firestore rule for private data first.')}};
-window.monetize=async()=>{try{await setDoc(doc(db,'users',user.uid),{monetized:true,monetizeRequestedAt:serverTimestamp()},{merge:true});me.monetized=true;go('settings')}catch(x){alert('Could not send request: '+(x.code||x))}};
+window.monetize=async()=>{
+ let n=0,p={};
+ try{const q=await getDocs(query(collection(db,'videos'),where('uid','==',user.uid)));n=q.size}catch(x){}
+ try{const q=await getDoc(doc(db,'users',user.uid,'private','payout'));if(q.exists())p=q.data()}catch(x){}
+ if(n<3){alert('You need at least 3 videos of your own. You have '+n+'.');return}
+ if(!(p.easypaisa||p.jazzcash||p.account)){alert('Save your payment details first.');return}
+ try{await setDoc(doc(db,'users',user.uid),{monetized:true,monetizeRequestedAt:serverTimestamp()},{merge:true});me.monetized=true;go('settings')}catch(x){alert('Could not send request: '+(x.code||x))}};
 async function settings(a){
  let p={};try{const s=await getDoc(doc(db,'users',user.uid,'private','payout'));if(s.exists())p=s.data()}catch(x){}
  const f=(id,l,v,ph)=>'<label class="s">'+l+'</label><input id="'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="'+IN+'">';
  a.innerHTML='<div class="m"><button onclick="go(\'me\')">← Back</button><h3>Settings</h3></div>'
  +'<div class="card"><h4>Language</h4><div id="gtslot"></div><p class="s">Choose any language. Tube translates itself.</p></div>'
  +'<div class="card"><h4>Payment details</h4>'+f('ep','Easypaisa number',p.easypaisa,'03XX XXXXXXX')+f('jc','JazzCash number',p.jazzcash,'03XX XXXXXXX')+f('bk','Bank name (e.g. Meezan Bank)',p.bank)+f('bt','Account title',p.title)+f('ba','Account number / IBAN',p.account)+'<button class="on" onclick="savePay()">Save payment details</button></div>'
- +'<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':'<p class="s">Request monetization to start earning 60% of ad money on your videos. Tube keeps 40%.</p><button class="on" onclick="monetize()">Request monetization</button>')+'</div>'
- +'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="logout()">Sign out</button></div></div>';
+ +'<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':'<p class="s">Needs at least 3 of your own videos and saved payment details. Then you earn 60% of ad money on your videos. Tube keeps 40%.</p><button class="on" onclick="monetize()">Request monetization</button>')+'</div>'
+ +'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="go(\'terms\')">Rules</button><button onclick="logout()">Sign out</button></div></div>';
  const g=$('gt');$('gtslot').appendChild(g);g.style.display='block'}
+
+
+// ---- reports, movies, rules ----
+window.rep=async id=>{if(!confirm('Report this video for copied, adult, violent or misleading content?'))return;
+ try{await addDoc(collection(db,'reports'),{video:id,by:user.uid,createdAt:serverTimestamp()});alert('Thanks. We will review it.')}catch(x){alert('Could not send report: '+(x.code||x))}};
+const BASE='https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/',BL='Blender Foundation, CC BY 3.0';
+const FREE=[
+ {t:'Sintel',c:'cartoon',u:BASE+'Sintel.mp4',l:BL},
+ {t:'Big Buck Bunny',c:'cartoon',u:BASE+'BigBuckBunny.mp4',l:BL},
+ {t:'Elephants Dream',c:'cartoon',u:BASE+'ElephantsDream.mp4',l:BL},
+ {t:'Tears of Steel',c:'movie',u:BASE+'TearsOfSteel.mp4',l:BL}];
+let mvTab='movie';
+window.mvSet=k=>{mvTab=k;go('mv')};
+async function movies(a){
+ let list=FREE.slice();
+ try{const s=await getDocs(query(collection(db,'movies'),limit(50)));s.forEach(d=>list.push(d.data()))}catch(x){}
+ const L=list.filter(m=>m.c==mvTab);
+ let h='<div class="chips"><button class="'+(mvTab=='movie'?'on':'')+'" onclick="mvSet(\'movie\')">Movies</button><button class="'+(mvTab=='cartoon'?'on':'')+'" onclick="mvSet(\'cartoon\')">Cartoons</button></div>';
+ h+=L.length?L.map((m,i)=>'<div><video src="'+esc(m.u)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(m.t)+'</b><div class="s">'+esc(m.l||'Free to watch')+'</div></div></div>'+((i+1)%2==0?'<div class="ad">Ad space: paste your AdSense code here</div>':'')).join(''):'<p class="m">Nothing here yet.</p>';
+ a.innerHTML=h}
+function terms(a){
+ a.innerHTML='<div class="m"><button onclick="go(\'settings\')">← Back</button><h3>Tube rules</h3>'
+ +'<p><b>Uploading</b></p><p class="s">Upload only videos you made yourself. Do not upload videos made by others, videos with other apps\' watermarks, or movies and cartoons you do not own. Adult, violent, hateful, misleading and unsafe content for children is not allowed. Videos can be up to 35 minutes and 100 MB.</p>'
+ +'<p><b>Reports and removal</b></p><p class="s">Anyone can report a video. Videos that break these rules are removed. Repeated breaking of the rules turns off monetization for the channel.</p>'
+ +'<p><b>Earning</b></p><p class="s">After monetization, the creator earns 60% of ad money on their videos and Tube keeps 40%. Fake views or clicking ads yourself means earnings are cancelled. Minimum withdrawal is Rs 1,000.</p>'
+ +'<p><b>Free movies and cartoons</b></p><p class="s">Only public domain and Creative Commons films are shown, with their license written under each title.</p>'
+ +'<p><b>Privacy</b></p><p class="s">Your payment details are visible only to you and the Tube owner. Ads shown in Tube may use cookies.</p></div>'}
 
 window.go=async t=>{
  const a=$('app'),g=$('gt');if(g.parentNode!==document.body){g.style.display='none';document.body.appendChild(g)}
@@ -96,17 +130,19 @@ window.go=async t=>{
  if(t=='home'){
   a.innerHTML='<p class="m s">Loading…</p>';
   const s=await getDocs(query(collection(db,'videos'),orderBy('createdAt','desc'),limit(30)));let h='',i=0;
-  s.forEach(d=>{const v=d.data();h+='<div><video src="'+esc(v.url)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'</div></div></div>';if(++i%3==0)h+='<div class="ad">Ad space: paste your AdSense or AdMob code here</div>'});
+  s.forEach(d=>{const v=d.data();h+='<div><video src="'+esc(v.url)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'</div><button class="rp" onclick="rep(\''+d.id+'\')">Report</button></div></div>';if(++i%3==0)h+='<div class="ad">Ad space: paste your AdSense or AdMob code here</div>'});
   a.innerHTML=h||'<p class="m">No videos yet. Tap Upload.</p>';return}
  if(t=='fr'){
   const s=await getDocs(query(collection(db,'users'),limit(50)));let h='<h3 class="m">People</h3>';
   s.forEach(d=>{if(d.id==user.uid)return;h+='<div class="fr"><span>'+esc(d.data().name||'User')+'</span><button class="on" onclick="addFr(\''+d.id+'\',this)">Add friend</button></div>'});
   a.innerHTML=h;return}
  if(t=='settings'){await settings(a);return}
+ if(t=='mv'){await movies(a);return}
+ if(t=='terms'){terms(a);return}
  await profile(a)};
 $('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
  const v=document.createElement('video');v.preload='metadata';
- v.onloadedmetadata=()=>{if(f.size>MAXB)alert('Video is bigger than 100 MB. Choose a smaller one.');else if(v.duration>MAX)alert('Video is longer than 35 minutes');else send(f)};v.src=URL.createObjectURL(f)};
+ v.onloadedmetadata=()=>{if(f.size>MAXB)alert('Video is bigger than 100 MB. Choose a smaller one.');else if(v.duration>MAX)alert('Video is longer than 35 minutes');else if(confirm('Upload only your own video. No copied, adult, violent or misleading content. Tap OK to agree to the Tube rules.'))send(f)};v.src=URL.createObjectURL(f)};
 function send(f){
  const def=f.name.replace(/\.[^.]+$/,''),title=(prompt('Video title',def)||def).trim().slice(0,100)||def;
  const x=new XMLHttpRequest(),d=new FormData();
