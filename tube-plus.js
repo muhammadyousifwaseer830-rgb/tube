@@ -12,6 +12,10 @@ const ASP={orig:'',v:'ar_9:16,c_fill,w_720',sq:'ar_1:1,c_fill,w_720',h:'ar_16:9,
 const AR={orig:'16/9',v:'9/16',sq:'1/1',h:'16/9'};
 const S='width:100%;padding:10px;border:1px solid #ccc;border-radius:10px;margin:4px 0 10px;font:inherit;box-sizing:border-box';
 
+function ring(p){
+  $('rn').textContent=p+'%';$('rc').style.strokeDashoffset=339.3*(1-p/100);
+  $('rl').textContent=p>=100?'Saving your video…':'Uploading…';
+}
 function editor(f,dur){
   const o=document.createElement('div');
   o.style.cssText='position:fixed;inset:0;background:#fff;z-index:99;overflow:auto;max-width:560px;margin:auto;padding:14px;box-sizing:border-box;font-family:system-ui,sans-serif';
@@ -24,7 +28,7 @@ function editor(f,dur){
    +'<label>Cut: end (seconds, total '+Math.floor(dur)+')</label><input id="ee" type="number" min="1" step="0.5" value="'+Math.floor(dur)+'" style="'+S+'">'
    +'<label>Picture size</label><select id="ea" style="'+S+'"><option value="orig">Original</option><option value="v">Tall 9:16 (phone)</option><option value="sq">Square 1:1</option><option value="h">Wide 16:9</option></select>'
    +'<label>Colour / look</label><select id="ef" style="'+S+'"><option value="none">None</option><option value="bw">Black and white</option><option value="sepia">Old film (sepia)</option><option value="vivid">Vivid colours</option><option value="bright">Brighter</option><option value="cartoon">Cartoon</option></select>'
-   +'<div id="ep" style="display:none;margin:8px 0">Uploading 0%</div>'
+   +'<div id="ep" style="display:none;position:fixed;inset:0;background:rgba(255,255,255,.95);z-index:100;flex-direction:column;align-items:center;justify-content:center"><div style="position:relative;width:140px;height:140px"><svg width="140" height="140" viewBox="0 0 120 120" style="transform:rotate(-90deg)"><circle cx="60" cy="60" r="54" fill="none" stroke="#eee" stroke-width="10"/><circle id="rc" cx="60" cy="60" r="54" fill="none" stroke="#e5322d" stroke-width="10" stroke-linecap="round" stroke-dasharray="339.3" stroke-dashoffset="339.3" style="transition:stroke-dashoffset .3s"/></svg><div id="rn" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 30px system-ui,sans-serif">0%</div></div><p id="rl" style="margin-top:16px;font:16px system-ui,sans-serif;color:#606060">Uploading…</p></div>'
    +'<div style="display:flex;gap:8px"><button id="eu" style="flex:1;padding:12px;border:0;border-radius:18px;background:#0f0f0f;color:#fff;font:inherit">Upload</button><button id="ec" style="padding:12px;border:0;border-radius:18px;background:#f2f2f2;font:inherit">Cancel</button></div>';
   document.body.appendChild(o);
   const v=$('ev');v.src=URL.createObjectURL(f);
@@ -38,20 +42,20 @@ function editor(f,dur){
     if(e-s>MAX){alert('The cut is longer than 35 minutes.');return}
     const title=($('et').value.trim()||def).slice(0,100);
     const parts=[(s>0||e<Math.floor(dur))?'so_'+s+',eo_'+e:'',ASP[$('ea').value],FIL[$('ef').value]].filter(Boolean).join('/');
-    $('eu').disabled=true;$('ep').style.display='block';
+    $('eu').disabled=true;ring(0);$('ep').style.display='flex';
     const x=new XMLHttpRequest(),d=new FormData();
     d.append('file',f);d.append('upload_preset','tube_videos');
     x.open('POST','https://api.cloudinary.com/v1_1/qpaa2pyv/video/upload');
-    x.upload.onprogress=ev=>{if(ev.lengthComputable)$('ep').textContent='Uploading '+Math.round(ev.loaded/ev.total*100)+'%'};
-    x.onerror=()=>{alert('Upload failed. Check your internet.');$('eu').disabled=false};
+    x.upload.onprogress=ev=>{if(ev.lengthComputable)ring(Math.round(ev.loaded/ev.total*100))};
+    x.onerror=()=>{alert('Upload failed. Check your internet.');$('eu').disabled=false;$('ep').style.display='none'};
     x.onload=async()=>{
       let r={};try{r=JSON.parse(x.responseText)}catch(_){}
-      if(!r.secure_url){alert('Upload failed: '+((r.error&&r.error.message)||x.status));$('eu').disabled=false;return}
+      if(!r.secure_url){alert('Upload failed: '+((r.error&&r.error.message)||x.status));$('eu').disabled=false;$('ep').style.display='none';return}
       const url=parts?r.secure_url.replace('/upload/','/upload/'+parts+'/'):r.secure_url;
       const u=auth.currentUser;let name=(u.displayName||(u.email||'User').split('@')[0]);
       try{const m=await getDoc(doc(db,'users',u.uid));if(m.exists()&&m.data().name)name=m.data().name}catch(_){}
       try{await addDoc(collection(db,'videos'),{title,url,orig:r.secure_url,uid:u.uid,name,createdAt:serverTimestamp()})}
-      catch(err){alert('Could not save: '+(err.code||err));$('eu').disabled=false;return}
+      catch(err){alert('Could not save: '+(err.code||err));$('eu').disabled=false;$('ep').style.display='none';return}
       o.remove();window.go('home');
     };
     x.send(d);
@@ -86,3 +90,33 @@ async function inject(){
 }
 new MutationObserver(()=>setTimeout(inject,200)).observe($('app'),{childList:true,subtree:true});
 inject();
+
+/* ---------- app name: TUBE8 ---------- */
+const NAME='TUBE8';
+function rename(){
+  document.title=NAME;
+  const h=document.querySelector('header');
+  if(h)h.childNodes.forEach(t=>{if(t.nodeType===3&&t.textContent.trim()==='Tube')t.textContent=NAME});
+  const w=document.createTreeWalker($('app'),NodeFilter.SHOW_TEXT);let n;
+  while((n=w.nextNode()))if(/\bTube\b/.test(n.textContent))n.textContent=n.textContent.replace(/\bTube\b/g,NAME);
+}
+new MutationObserver(rename).observe($('app'),{childList:true,subtree:true});
+rename();
+
+/* ---------- round loading spinner instead of plain "Loading…" text ---------- */
+const st=document.createElement('style');
+st.textContent='@keyframes tspin{to{transform:rotate(360deg)}}.sp{width:44px;height:44px;margin:40px auto;border:5px solid #eee;border-top-color:#e5322d;border-radius:50%;animation:tspin .8s linear infinite}';
+document.head.appendChild(st);
+function spin(){document.querySelectorAll('#app p.m.s').forEach(p=>{if(p.textContent.trim()==='Loading…'){p.className='';p.innerHTML='<div class="sp"></div>'}})}
+new MutationObserver(spin).observe($('app'),{childList:true,subtree:true});
+spin();
+
+/* ---------- direct "Install app" button in the header ---------- */
+let ip=null;
+const ib=document.createElement('button');
+ib.textContent='Install app';
+ib.style.cssText='float:right;background:#e5322d;color:#fff;padding:6px 14px;font-size:13px;display:none';
+document.querySelector('header').appendChild(ib);
+window.addEventListener('beforeinstallprompt',e=>{ip=e;if(!matchMedia('(display-mode: standalone)').matches)ib.style.display='inline-block'});
+ib.onclick=async()=>{if(!ip)return;ip.prompt();try{await ip.userChoice}catch(_){}ip=null;ib.style.display='none'};
+window.addEventListener('appinstalled',()=>{ib.style.display='none'});
