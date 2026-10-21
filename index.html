@@ -88,31 +88,38 @@ window.monetize=async()=>{
 async function settings(a){
  let p={};try{const s=await getDoc(doc(db,'users',user.uid,'private','payout'));if(s.exists())p=s.data()}catch(x){}
  const f=(id,l,v,ph)=>'<label class="s">'+l+'</label><input id="'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="'+IN+'">';
+ await loadOwner();
+ const extra=(owner==='none'?'<div class="card"><h4>Owner</h4><p class="s">No owner is set yet. The first person to tap this becomes the Tube owner. Tap it now if you are the owner.</p><button class="on" onclick="claim()">I am the owner</button></div>':'')
+ +(isOwner()?'<div class="card"><h4>Add free movie (owner)</h4>'+f('mt','Title')+f('mu','archive.org page link or direct https .mp4 link')+f('ml','License (e.g. Public Domain)')+'<select id="mc" style="'+IN+'"><option value="movie">Movie</option><option value="cartoon">Cartoon</option></select><button class="on" onclick="addMv()">Add</button><p class="s">Find public domain films at archive.org/details/movies and copy the page link.</p></div>':'');
  a.innerHTML='<div class="m"><button onclick="go(\'me\')">← Back</button><h3>Settings</h3></div>'
  +'<div class="card"><h4>Language</h4><div id="gtslot"></div><p class="s">Choose any language. Tube translates itself.</p></div>'
  +'<div class="card"><h4>Payment details</h4>'+f('ep','Easypaisa number',p.easypaisa,'03XX XXXXXXX')+f('jc','JazzCash number',p.jazzcash,'03XX XXXXXXX')+f('bk','Bank name (e.g. Meezan Bank)',p.bank)+f('bt','Account title',p.title)+f('ba','Account number / IBAN',p.account)+'<button class="on" onclick="savePay()">Save payment details</button></div>'
  +'<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':'<p class="s">Needs at least 3 of your own videos and saved payment details. Then you earn 60% of ad money on your videos. Tube keeps 40%.</p><button class="on" onclick="monetize()">Request monetization</button>')+'</div>'
- +'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="go(\'terms\')">Rules</button><button onclick="logout()">Sign out</button></div></div>';
+ +extra+'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="go(\'terms\')">Rules</button><button onclick="logout()">Sign out</button></div></div>';
  const g=$('gt');$('gtslot').appendChild(g);g.style.display='block'}
 
 
 // ---- reports, movies, rules ----
 window.rep=async id=>{if(!confirm('Report this video for copied, adult, violent or misleading content?'))return;
  try{await addDoc(collection(db,'reports'),{video:id,by:user.uid,createdAt:serverTimestamp()});alert('Thanks. We will review it.')}catch(x){alert('Could not send report: '+(x.code||x))}};
-const BASE='https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/',BL='Blender Foundation, CC BY 3.0';
-const FREE=[
- {t:'Sintel',c:'cartoon',u:BASE+'Sintel.mp4',l:BL},
- {t:'Big Buck Bunny',c:'cartoon',u:BASE+'BigBuckBunny.mp4',l:BL},
- {t:'Elephants Dream',c:'cartoon',u:BASE+'ElephantsDream.mp4',l:BL},
- {t:'Tears of Steel',c:'movie',u:BASE+'TearsOfSteel.mp4',l:BL}];
-let mvTab='movie';
+let owner=null,mvTab='movie';
+async function loadOwner(){try{const q=await getDoc(doc(db,'config','owner'));owner=q.exists()?q.data().uid:'none'}catch(e){owner=null}}
+const isOwner=()=>owner&&owner!=='none'&&owner==user.uid;
 window.mvSet=k=>{mvTab=k;go('mv')};
+window.claim=async()=>{try{await setDoc(doc(db,'config','owner'),{uid:user.uid});alert('You are now the Tube owner.');go('settings')}catch(x){alert('Could not set owner. Add the new Firestore rules first. '+(x.code||''))}};
+window.addMv=async()=>{const t=$('mt').value.trim(),u0=$('mu').value.trim(),l=$('ml').value.trim()||'Free to watch',c=$('mc').value;
+ if(!t||!u0){alert('Enter a title and a link');return}
+ let type='mp4',u=u0;const m=u0.match(/archive\.org\/(?:details|embed)\/([^\/?#\s]+)/);
+ if(m){type='ia';u=m[1]}else if(!/^https:\/\//.test(u0)){alert('The link must start with https://');return}
+ try{await addDoc(collection(db,'movies'),{t,u,c,l,type,createdAt:serverTimestamp()});alert('Added');mvTab=c;go('mv')}catch(x){alert('Could not add: '+(x.code||x))}};
+window.delMv=async id=>{if(!confirm('Delete this?'))return;try{await deleteDoc(doc(db,'movies',id));go('mv')}catch(x){alert('Could not delete: '+(x.code||x))}};
 async function movies(a){
- let list=FREE.slice();
- try{const s=await getDocs(query(collection(db,'movies'),limit(50)));s.forEach(d=>list.push(d.data()))}catch(x){}
+ await loadOwner();
+ let list=[];
+ try{const q=await getDocs(query(collection(db,'movies'),limit(50)));q.forEach(d=>list.push({id:d.id,...d.data()}))}catch(x){}
  const L=list.filter(m=>m.c==mvTab);
  let h='<div class="chips"><button class="'+(mvTab=='movie'?'on':'')+'" onclick="mvSet(\'movie\')">Movies</button><button class="'+(mvTab=='cartoon'?'on':'')+'" onclick="mvSet(\'cartoon\')">Cartoons</button></div>';
- h+=L.length?L.map((m,i)=>'<div><video src="'+esc(m.u)+'" controls playsinline preload="metadata"></video><div class="m"><b>'+esc(m.t)+'</b><div class="s">'+esc(m.l||'Free to watch')+'</div></div></div>'+((i+1)%2==0?'<div class="ad">Ad space: paste your AdSense code here</div>':'')).join(''):'<p class="m">Nothing here yet.</p>';
+ h+=L.length?L.map((m,i)=>'<div>'+(m.type=='ia'?'<iframe src="https://archive.org/embed/'+esc(m.u)+'" style="width:100%;height:240px;border:0" allowfullscreen></iframe>':'<video src="'+esc(m.u)+'" controls playsinline preload="metadata"></video>')+'<div class="m"><b>'+esc(m.t)+'</b><div class="s">'+esc(m.l||'Free to watch')+'</div>'+(isOwner()?'<button class="rp" onclick="delMv(\''+m.id+'\')">Delete</button>':'')+'</div></div>'+((i+1)%2==0?'<div class="ad">Ad space: paste your AdSense code here</div>':'')).join(''):'<p class="m">Nothing here yet.'+(isOwner()?' Add one from Settings.':'')+'</p>';
  a.innerHTML=h}
 function terms(a){
  a.innerHTML='<div class="m"><button onclick="go(\'settings\')">← Back</button><h3>Tube rules</h3>'
