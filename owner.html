@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ur" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tube – اونر پینل</title>
+<style>
+:root{--bg:#f3f5f4;--card:#fff;--ink:#17262b;--mut:#66787e;--ac:#0b6e6e;--bad:#b3261e;--ok:#1b7a3d;--bd:#d6dedd}
+@media(prefers-color-scheme:dark){:root{--bg:#10191b;--card:#18262a;--ink:#e8f0ef;--mut:#93a7ab;--ac:#4fc3c3;--bad:#ff8a80;--ok:#6fdc8c;--bd:#2c3f43}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.7 "Noto Naskh Arabic","Noto Nastaliq Urdu",Tahoma,sans-serif;padding-bottom:40px}
+header{background:var(--ac);color:#fff;padding:14px 16px;font-size:20px;font-weight:700}
+.wrap{max-width:720px;margin:0 auto;padding:12px}
+nav{display:flex;gap:6px;overflow-x:auto;padding:10px 12px;position:sticky;top:0;background:var(--bg);z-index:5}
+nav button{flex:none;border:1px solid var(--bd);background:var(--card);color:var(--ink);padding:8px 14px;border-radius:20px;font:inherit}
+nav button.on{background:var(--ac);color:#fff;border-color:var(--ac)}
+.c{background:var(--card);border:1px solid var(--bd);border-radius:10px;padding:12px;margin:10px 0;word-break:break-word}
+.c small{color:var(--mut);display:block;direction:ltr;text-align:right;white-space:pre-wrap}
+button.a{border:0;border-radius:8px;padding:8px 14px;font:inherit;background:var(--ac);color:#fff;margin:6px 0 0 6px}
+button.d{background:var(--bad)}button.g{background:var(--ok)}
+textarea,input{width:100%;padding:10px;border:1px solid var(--bd);border-radius:8px;background:var(--bg);color:var(--ink);font:14px monospace;direction:ltr}
+.m{color:var(--mut);text-align:center;padding:24px}
+.e{color:var(--bad)}
+</style>
+</head>
+<body>
+<header>Tube – اونر پینل</header>
+<div class="wrap" id="app"><div class="m">لوڈ ہو رہا ہے…</div></div>
+<script type="module">
+import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import{getAuth,GoogleAuthProvider,signInWithPopup,onAuthStateChanged}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import{getFirestore,doc,getDoc,setDoc,updateDoc,deleteDoc,collection,getDocs,limit,query}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+const $=s=>document.querySelector(s),app=$("#app");
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+let db,auth,tab="req";
+
+async function getConfig(){
+  const saved=localStorage.getItem("tubeCfg");
+  if(saved){try{return JSON.parse(saved)}catch(e){}}
+  try{
+    const t=await(await fetch("./index.html",{cache:"no-store"})).text();
+    const g=k=>(t.match(new RegExp(k+"\\s*[:=]\\s*[\"']([^\"']+)[\"']"))||[])[1];
+    const cfg={};["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{const v=g(k);if(v)cfg[k]=v});
+    if(cfg.apiKey&&cfg.projectId)return cfg;
+  }catch(e){}
+  return null;
+}
+function askConfig(){
+  app.innerHTML=`<div class="c"><b>Firebase کنفیگ چاہیے</b><p>index.html سے firebaseConfig کی لائنیں (apiKey, authDomain, projectId, appId) یہاں پیسٹ کریں۔</p><textarea id="cfg" rows="8" placeholder='{"apiKey":"...","authDomain":"...","projectId":"...","appId":"..."}'></textarea><button class="a" id="ok">محفوظ کریں</button></div>`;
+  $("#ok").onclick=()=>{
+    const t=$("#cfg").value,cfg={};
+    ["apiKey","authDomain","projectId","storageBucket","messagingSenderId","appId"].forEach(k=>{const m=t.match(new RegExp("[\"']?"+k+"[\"']?\\s*:\\s*[\"']([^\"']+)[\"']"));if(m)cfg[k]=m[1]});
+    if(!cfg.apiKey||!cfg.projectId)return alert("apiKey اور projectId ضروری ہیں");
+    localStorage.setItem("tubeCfg",JSON.stringify(cfg));location.reload();
+  };
+}
+function loginView(msg){
+  app.innerHTML=`<div class="c"><p>${msg||"اونر کے گوگل اکاؤنٹ سے لاگ اِن کریں۔"}</p><button class="a" id="gl">گوگل سے لاگ اِن</button></div>`;
+  $("#gl").onclick=()=>signInWithPopup(auth,new GoogleAuthProvider()).catch(e=>loginView('<span class="e">'+esc(e.message)+"</span>"));
+}
+async function boot(){
+  const cfg=await getConfig();
+  if(!cfg)return askConfig();
+  const a=initializeApp(cfg);auth=getAuth(a);db=getFirestore(a);
+  onAuthStateChanged(auth,async u=>{
+    if(!u)return loginView();
+    try{
+      const o=await getDoc(doc(db,"config","owner"));
+      if(!o.exists()||o.data().uid!==u.uid)return loginView('<span class="e">یہ اکاؤنٹ اونر نہیں ہے۔ اونر والے اکاؤنٹ سے لاگ اِن کریں۔</span>');
+      shell();
+    }catch(e){loginView('<span class="e">'+esc(e.message)+"</span>")}
+  });
+}
+const TABS=[["req","مونیٹائزیشن"],["usr","یوزرز"],["rep","رپورٹس"],["wd","نکلوانا"],["ads","اشتہار"]];
+function shell(){
+  app.innerHTML=`<nav>${TABS.map(([k,n])=>`<button data-k="${k}" class="${k===tab?"on":""}">${n}</button>`).join("")}</nav><div id="body"></div>`;
+  app.querySelectorAll("nav button").forEach(b=>b.onclick=()=>{tab=b.dataset.k;shell()});
+  ({req:reqV,usr:usrV,rep:repV,wd:wdV,ads:adsV})[tab]();
+}
+const body=()=>$("#body");
+const nm=d=>d.displayName||d.name||d.username||d.email||"بے نام";
+const monKeys=d=>Object.keys(d).filter(k=>/monet/i.test(k));
+const fcount=d=>d.friendsCount??d.friends_count??(Array.isArray(d.friends)?d.friends.length:d.friends)??"—";
+
+async function loadUsers(){const s=await getDocs(query(collection(db,"users"),limit(300)));return s.docs.map(x=>({id:x.id,...x.data()}))}
+async function setMon(uid,v){await updateDoc(doc(db,"users",uid),{monetized:v,monetizedAt:v?Date.now():null})}
+
+async function reqV(){
+  body().innerHTML='<div class="m">لوڈ ہو رہا ہے…</div>';
+  try{
+    const us=await loadUsers();
+    const p=us.filter(u=>!u.monetized&&monKeys(u).some(k=>u[k]===true||(u[k]&&typeof u[k]==="object")||u[k]==="pending"||u[k]==="requested"));
+    body().innerHTML=p.length?p.map(u=>`<div class="c"><b>${esc(nm(u))}</b><br>فرینڈز: ${esc(fcount(u))}<small>${esc(u.id)}</small><button class="a g" data-id="${esc(u.id)}">مونیٹائز کریں</button></div>`).join(""):'<div class="m">کوئی نئی درخواست نہیں۔</div>';
+    body().querySelectorAll("button").forEach(b=>b.onclick=async()=>{b.disabled=true;await setMon(b.dataset.id,true);reqV()});
+  }catch(e){body().innerHTML='<div class="c e">'+esc(e.message)+"</div>"}
+}
+async function usrV(){
+  body().innerHTML='<div class="m">لوڈ ہو رہا ہے…</div>';
+  try{
+    const us=await loadUsers();
+    body().innerHTML=`<div class="m">کل یوزرز: ${us.length}</div>`+us.map(u=>`<div class="c"><b>${esc(nm(u))}</b> ${u.monetized?"✅":""}<br>فرینڈز: ${esc(fcount(u))}<small>${esc(u.id)}</small><button class="a ${u.monetized?"d":"g"}" data-id="${esc(u.id)}" data-v="${u.monetized?0:1}">${u.monetized?"مونیٹائزیشن ختم":"مونیٹائز کریں"}</button></div>`).join("");
+    body().querySelectorAll("button").forEach(b=>b.onclick=async()=>{b.disabled=true;await setMon(b.dataset.id,b.dataset.v==="1");usrV()});
+  }catch(e){body().innerHTML='<div class="c e">'+esc(e.message)+"</div>"}
+}
+async function repV(){
+  body().innerHTML='<div class="m">لوڈ ہو رہا ہے…</div>';
+  try{
+    const s=await getDocs(query(collection(db,"reports"),limit(200)));
+    if(!s.size)return body().innerHTML='<div class="m">کوئی رپورٹ نہیں۔</div>';
+    body().innerHTML=s.docs.map(x=>{const d=x.data(),v=d.videoId||d.vid||d.video||d.targetId||"";return`<div class="c"><small>${esc(JSON.stringify(d,null,1))}</small>${v?`<button class="a d" data-v="${esc(v)}" data-r="${x.id}">ویڈیو ہٹائیں</button>`:""}<button class="a" data-r="${x.id}" data-only="1">رپورٹ بند</button></div>`}).join("");
+    body().querySelectorAll("button").forEach(b=>b.onclick=async()=>{
+      b.disabled=true;
+      if(b.dataset.v)await deleteDoc(doc(db,"videos",b.dataset.v));
+      await deleteDoc(doc(db,"reports",b.dataset.r));repV();
+    });
+  }catch(e){body().innerHTML='<div class="c e">'+esc(e.message)+"</div>"}
+}
+async function wdV(){
+  body().innerHTML='<div class="m">لوڈ ہو رہا ہے…</div>';
+  try{
+    const s=await getDocs(query(collection(db,"withdrawRequests"),limit(200)));
+    if(!s.size)return body().innerHTML='<div class="m">کوئی درخواست نہیں۔</div>';
+    body().innerHTML=s.docs.map(x=>{const d=x.data();return`<div class="c"><small>${esc(JSON.stringify(d,null,1))}</small>${d.status==="paid"?"✅ ادا ہو گئی":`<button class="a g" data-id="${x.id}">ادا ہو گئی</button>`}</div>`}).join("");
+    body().querySelectorAll("button").forEach(b=>b.onclick=async()=>{b.disabled=true;await updateDoc(doc(db,"withdrawRequests",b.dataset.id),{status:"paid",paidAt:Date.now()});wdV()});
+  }catch(e){body().innerHTML='<div class="c e">'+esc(e.message)+"</div>"}
+}
+async function adsV(){
+  let d={};try{const s=await getDoc(doc(db,"config","ads"));if(s.exists())d=s.data()}catch(e){}
+  const F=[["ownerPage","اونر پیج کا اشتہاری کوڈ"],["feed","فیڈ کا اشتہاری کوڈ"],["movies","فلموں/کارٹون کا اشتہاری کوڈ"]];
+  body().innerHTML=F.map(([k,n])=>`<div class="c"><b>${n}</b><textarea rows="4" id="ad_${k}">${esc(d[k]||"")}</textarea></div>`).join("")+'<div class="c"><button class="a" id="sv">محفوظ کریں</button></div>';
+  $("#sv").onclick=async()=>{
+    const o={};F.forEach(([k])=>o[k]=$("#ad_"+k).value);
+    try{await setDoc(doc(db,"config","ads"),o,{merge:true});alert("محفوظ ہو گیا")}catch(e){alert(e.message)}
+  };
+}
+boot();
+</script>
+</body>
+</html>
