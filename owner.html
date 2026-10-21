@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Tube – اونر پینل</title>
+<title>TUBE8 – اونر پینل</title>
 <style>
 :root{--bg:#f3f5f4;--card:#fff;--ink:#17262b;--mut:#66787e;--ac:#0b6e6e;--bad:#b3261e;--ok:#1b7a3d;--bd:#d6dedd}
 @media(prefers-color-scheme:dark){:root{--bg:#10191b;--card:#18262a;--ink:#e8f0ef;--mut:#93a7ab;--ac:#4fc3c3;--bad:#ff8a80;--ok:#6fdc8c;--bd:#2c3f43}}
@@ -24,7 +24,7 @@ textarea,input{width:100%;padding:10px;border:1px solid var(--bd);border-radius:
 </style>
 </head>
 <body>
-<header>Tube – اونر پینل</header>
+<header>TUBE8 – اونر پینل</header>
 <div class="wrap" id="app"><div class="m">لوڈ ہو رہا ہے…</div></div>
 <script type="module">
 import{initializeApp}from"https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
@@ -83,13 +83,13 @@ const monKeys=d=>Object.keys(d).filter(k=>/monet/i.test(k));
 const fcount=d=>d.friendsCount??d.friends_count??(Array.isArray(d.friends)?d.friends.length:d.friends)??"—";
 
 async function loadUsers(){const s=await getDocs(query(collection(db,"users"),limit(300)));return s.docs.map(x=>({id:x.id,...x.data()}))}
-async function setMon(uid,v){await updateDoc(doc(db,"users",uid),{monetized:v,monetizedAt:v?Date.now():null})}
+async function setMon(uid,v){await updateDoc(doc(db,"users",uid),v?{monetized:true,monetizeRequest:false,monetizedAt:Date.now()}:{monetized:false,monetizeRequest:false})}
 
 async function reqV(){
   body().innerHTML='<div class="m">لوڈ ہو رہا ہے…</div>';
   try{
     const us=await loadUsers();
-    const p=us.filter(u=>!u.monetized&&monKeys(u).some(k=>u[k]===true||(u[k]&&typeof u[k]==="object")||u[k]==="pending"||u[k]==="requested"));
+    const p=us.filter(u=>!u.monetized&&u.monetizeRequest===true);
     body().innerHTML=p.length?p.map(u=>`<div class="c"><b>${esc(nm(u))}</b><br>فرینڈز: ${esc(fcount(u))}<small>${esc(u.id)}</small><button class="a g" data-id="${esc(u.id)}">مونیٹائز کریں</button></div>`).join(""):'<div class="m">کوئی نئی درخواست نہیں۔</div>';
     body().querySelectorAll("button").forEach(b=>b.onclick=async()=>{b.disabled=true;await setMon(b.dataset.id,true);reqV()});
   }catch(e){body().innerHTML='<div class="c e">'+esc(e.message)+"</div>"}
