@@ -16,7 +16,7 @@ nav button{background:none}.fr{display:flex;justify-content:space-between;align-
 .card{margin:12px;padding:14px;border:1px solid #e3e3e3;border-radius:12px}
 .card h4{margin:0 0 10px}
 .tag{display:inline-block;font-size:12px;padding:3px 10px;border-radius:12px;background:#eee}.tag.g{background:#d8f3dc;color:#1b5e20}
-.rp{font-size:12px;padding:4px 10px;margin-top:6px}.chips{display:flex;gap:8px;padding:8px 12px}
+.rp{font-size:12px;padding:4px 10px;margin-top:6px}.chips{display:flex;gap:8px;padding:8px 12px;overflow-x:auto}.chips button{white-space:nowrap}
 .mv{display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-top:1px solid #eee;font-size:14px}
 </style></head><body>
 <header><i>▶</i>Tube</header><main id="app"></main>
@@ -90,7 +90,7 @@ async function settings(a){
  const f=(id,l,v,ph)=>'<label class="s">'+l+'</label><input id="'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="'+IN+'">';
  await loadOwner();
  const extra=(owner==='none'?'<div class="card"><h4>Owner</h4><p class="s">No owner is set yet. The first person to tap this becomes the Tube owner. Tap it now if you are the owner.</p><button class="on" onclick="claim()">I am the owner</button></div>':'')
- +(isOwner()?'<div class="card"><h4>Add free movie (owner)</h4>'+f('mt','Title')+f('mu','archive.org page link or direct https .mp4 link')+f('ml','License (e.g. Public Domain)')+'<select id="mc" style="'+IN+'"><option value="movie">Movie</option><option value="cartoon">Cartoon</option></select><button class="on" onclick="addMv()">Add</button><p class="s">Find public domain films at archive.org/details/movies and copy the page link.</p></div>':'');
+ +(isOwner()?'<div class="card"><h4>Add free movie (owner)</h4>'+f('mt','Title')+f('mu','YouTube link, archive.org page link or direct https .mp4 link')+f('ml','License (e.g. Public Domain)')+'<select id="mc" style="'+IN+'"><option value="movie">Free movie (public domain / open license)</option><option value="cartoon">Cartoon (open license)</option><option value="pkdrama">Pakistani drama</option><option value="pkmovie">Pakistani movie</option><option value="pksong">Pakistani song</option><option value="inmovie">Indian movie</option><option value="insong">Indian song</option></select><button class="on" onclick="addMv()">Add</button><p class="s">For dramas, films and songs paste the link of the official YouTube video of its owner. It plays in the YouTube player. If it shows an error, the owner has switched embedding off, so pick another.</p></div>':'');
  a.innerHTML='<div class="m"><button onclick="go(\'me\')">← Back</button><h3>Settings</h3></div>'
  +'<div class="card"><h4>Language</h4><div id="gtslot"></div><p class="s">Choose any language. Tube translates itself.</p></div>'
  +'<div class="card"><h4>Payment details</h4>'+f('ep','Easypaisa number',p.easypaisa,'03XX XXXXXXX')+f('jc','JazzCash number',p.jazzcash,'03XX XXXXXXX')+f('bk','Bank name (e.g. Meezan Bank)',p.bank)+f('bt','Account title',p.title)+f('ba','Account number / IBAN',p.account)+'<button class="on" onclick="savePay()">Save payment details</button></div>'
@@ -109,24 +109,27 @@ window.mvSet=k=>{mvTab=k;go('mv')};
 window.claim=async()=>{try{await setDoc(doc(db,'config','owner'),{uid:user.uid});alert('You are now the Tube owner.');go('settings')}catch(x){alert('Could not set owner. Add the new Firestore rules first. '+(x.code||''))}};
 window.addMv=async()=>{const t=$('mt').value.trim(),u0=$('mu').value.trim(),l=$('ml').value.trim()||'Free to watch',c=$('mc').value;
  if(!t||!u0){alert('Enter a title and a link');return}
- let type='mp4',u=u0;const m=u0.match(/archive\.org\/(?:details|embed)\/([^\/?#\s]+)/);
- if(m){type='ia';u=m[1]}else if(!/^https:\/\//.test(u0)){alert('The link must start with https://');return}
+ let type='mp4',u=u0;const yt=ytId(u0),ia=u0.match(/archive\.org\/(?:details|embed)\/([^\/?#\s]+)/);
+ if(yt){type='yt';u=yt}else if(ia){type='ia';u=ia[1]}else if(!/^https:\/\//.test(u0)){alert('The link must start with https://');return}
  try{await addDoc(collection(db,'movies'),{t,u,c,l,type,createdAt:serverTimestamp()});alert('Added');mvTab=c;go('mv')}catch(x){alert('Could not add: '+(x.code||x))}};
 window.delMv=async id=>{if(!confirm('Delete this?'))return;try{await deleteDoc(doc(db,'movies',id));go('mv')}catch(x){alert('Could not delete: '+(x.code||x))}};
+const TABS=[['movie','Free movies'],['cartoon','Cartoons'],['pkdrama','PK Dramas'],['pkmovie','PK Movies'],['pksong','PK Songs'],['inmovie','India Movies'],['insong','India Songs']];
+function ytId(u){const m=u.match(/(?:youtu\.be\/|youtube\.com\/(?:watch\?(?:.*&)?v=|shorts\/|embed\/|live\/))([\w-]{11})/);return m?m[1]:null}
+const player=m=>m.type=='yt'?'<iframe src="https://www.youtube.com/embed/'+esc(m.u)+'?rel=0" style="width:100%;aspect-ratio:16/9;border:0" allow="encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>':m.type=='ia'?'<iframe src="https://archive.org/embed/'+esc(m.u)+'" style="width:100%;height:240px;border:0" allowfullscreen></iframe>':'<video src="'+esc(m.u)+'" controls playsinline preload="metadata"></video>';
 async function movies(a){
  await loadOwner();
  let list=[];
- try{const q=await getDocs(query(collection(db,'movies'),limit(50)));q.forEach(d=>list.push({id:d.id,...d.data()}))}catch(x){}
- const L=list.filter(m=>m.c==mvTab);
- let h='<div class="chips"><button class="'+(mvTab=='movie'?'on':'')+'" onclick="mvSet(\'movie\')">Movies</button><button class="'+(mvTab=='cartoon'?'on':'')+'" onclick="mvSet(\'cartoon\')">Cartoons</button></div>';
- h+=L.length?L.map((m,i)=>'<div>'+(m.type=='ia'?'<iframe src="https://archive.org/embed/'+esc(m.u)+'" style="width:100%;height:240px;border:0" allowfullscreen></iframe>':'<video src="'+esc(m.u)+'" controls playsinline preload="metadata"></video>')+'<div class="m"><b>'+esc(m.t)+'</b><div class="s">'+esc(m.l||'Free to watch')+'</div>'+(isOwner()?'<button class="rp" onclick="delMv(\''+m.id+'\')">Delete</button>':'')+'</div></div>'+((i+1)%2==0?'<div class="ad">Ad space: paste your AdSense code here</div>':'')).join(''):'<p class="m">Nothing here yet.'+(isOwner()?' Add one from Settings.':'')+'</p>';
+ try{const q=await getDocs(query(collection(db,'movies'),limit(100)));q.forEach(d=>list.push({id:d.id,...d.data()}))}catch(x){}
+ const L=list.filter(m=>m.c==mvTab),own=mvTab=='movie'||mvTab=='cartoon';
+ let h='<div class="chips">'+TABS.map(t=>'<button class="'+(mvTab==t[0]?'on':'')+'" onclick="mvSet(\''+t[0]+'\')">'+t[1]+'</button>').join('')+'</div>';
+ h+=L.length?L.map((m,i)=>'<div>'+player(m)+'<div class="m"><b>'+esc(m.t)+'</b><div class="s">'+(m.type=='yt'?'Played from YouTube. The video owner keeps the views and earnings. ':'')+esc(m.l||'')+'</div>'+(isOwner()?'<button class="rp" onclick="delMv(\''+m.id+'\')">Delete</button>':'')+'</div></div>'+((i+1)%2==0&&own?'<div class="ad">Ad space: paste your AdSense code here</div>':'')).join(''):'<p class="m">Nothing here yet.'+(isOwner()?' Add one from Settings.':'')+'</p>';
  a.innerHTML=h}
 function terms(a){
  a.innerHTML='<div class="m"><button onclick="go(\'settings\')">← Back</button><h3>Tube rules</h3>'
  +'<p><b>Uploading</b></p><p class="s">Upload only videos you made yourself. Do not upload videos made by others, videos with other apps\' watermarks, or movies and cartoons you do not own. Adult, violent, hateful, misleading and unsafe content for children is not allowed. Videos can be up to 35 minutes and 100 MB.</p>'
  +'<p><b>Reports and removal</b></p><p class="s">Anyone can report a video. Videos that break these rules are removed. Repeated breaking of the rules turns off monetization for the channel.</p>'
  +'<p><b>Earning</b></p><p class="s">After monetization, the creator earns 60% of ad money on their videos and Tube keeps 40%. Fake views or clicking ads yourself means earnings are cancelled. Minimum withdrawal is Rs 1,000.</p>'
- +'<p><b>Free movies and cartoons</b></p><p class="s">Only public domain and Creative Commons films are shown, with their license written under each title.</p>'
+ +'<p><b>Free movies and cartoons</b></p><p class="s">Free movies and cartoons are public domain or open license, with the license written under each title. Dramas, films and songs from YouTube play in the YouTube player. Their owners keep the views and earnings, and Tube does not copy or host them.</p>'
  +'<p><b>Privacy</b></p><p class="s">Your payment details are visible only to you and the Tube owner. Ads shown in Tube may use cookies.</p></div>'}
 
 
