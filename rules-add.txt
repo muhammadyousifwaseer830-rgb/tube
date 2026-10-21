@@ -1,0 +1,25 @@
+پرانے رولز جوں کے توں رہنے دیں۔ صرف نیچے والا حصہ
+"match /databases/{d}/documents{" کے اندر، سب سے آخر میں
+(آخری دو }} سے پہلے) پیسٹ کریں، پھر Publish دبائیں۔
+
+ function isOwner(){
+  return request.auth!=null&&get(/databases/$(d)/documents/config/owner).data.uid==request.auth.uid;
+ }
+ match /videos/{id}{
+  allow delete:if isOwner();
+ }
+ match /users/{u}{
+  allow update:if isOwner();
+ }
+ match /reports/{r}{
+  allow read,delete:if isOwner();
+ }
+ match /withdrawRequests/{id}{
+  allow create:if request.auth!=null&&request.resource.data.uid==request.auth.uid;
+  allow read:if request.auth!=null&&(isOwner()||request.auth.uid==resource.data.uid);
+  allow update,delete:if isOwner();
+ }
+ match /config/ads{
+  allow read:if request.auth!=null;
+  allow write:if isOwner();
+ }
