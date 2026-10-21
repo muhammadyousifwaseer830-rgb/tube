@@ -65,11 +65,11 @@ window.delVid=async id=>{if(!confirm('Delete this video?'))return;try{await dele
 async function profile(a){
  a.innerHTML='<p class="m s">Loading…</p>';
  let vs=[];try{const s=await getDocs(query(collection(db,'videos'),where('uid','==',user.uid)));s.forEach(d=>vs.push({id:d.id,...d.data()}))}catch(x){}
- const photo=me.photo||user.photoURL||'',name=me.name||nm(user);
+ const st=await stats2(user.uid);const photo=me.photo||user.photoURL||'',name=me.name||nm(user);
  let h='<div class="cover"'+(me.cover?' style="background-image:url('+esc(me.cover)+')"':'')+'><button onclick="pick(\'cover\')">Change cover</button></div>';
  h+='<div class="m"><div class="av"'+(photo?' style="background-image:url('+esc(photo)+')"':'')+' onclick="pick(\'photo\')"></div>';
  if(edit){h+='<input id="pn" value="'+esc(name)+'" placeholder="Your name" style="'+IN+';margin-top:10px"><textarea id="pb" placeholder="About you (160 characters)" style="'+IN+';height:70px">'+esc(me.bio||'')+'</textarea><div class="row"><button class="on" onclick="saveProfile()">Save</button><button onclick="editOn(false)">Cancel</button></div><p class="s">Tap your round picture to change it.</p>'}
- else{h+='<h3 style="margin:10px 0 2px">'+esc(name)+'</h3><div class="s">'+esc(user.email||'')+'</div>'+(me.bio?'<p style="margin:8px 0">'+esc(me.bio)+'</p>':'')+'<div class="row"><span class="tag">'+vs.length+' videos</span><span class="tag'+(me.monetized?' g':'')+'">'+(me.monetized?'Monetized':'Not monetized')+'</span></div><div class="row"><button class="on" onclick="editOn(true)">Edit profile</button><button onclick="go(\'settings\')">Settings</button></div>'}
+ else{h+='<h3 style="margin:10px 0 2px">'+esc(name)+'</h3><div class="s">'+esc(user.email||'')+'</div>'+(me.bio?'<p style="margin:8px 0">'+esc(me.bio)+'</p>':'')+'<div class="row"><span class="tag">'+vs.length+' videos</span><span class="tag">'+st.f+' followers</span><span class="tag">'+st.v+' views</span><span class="tag'+(me.monetized?' g':'')+'">'+(me.monetized?'Monetized':'Not monetized')+'</span></div><div class="row"><button class="on" onclick="editOn(true)">Edit profile</button><button onclick="go(\'settings\')">Settings</button></div>'}
  h+='</div><h4 class="m" style="margin:0">My videos</h4>';
  vs.sort((x,y)=>(y.createdAt?.seconds||0)-(x.createdAt?.seconds||0));
  h+=vs.length?vs.map(v=>'<div class="mv"><span>'+esc(v.title)+'</span><button onclick="delVid(\''+v.id+'\')">Delete</button></div>').join(''):'<p class="m s">No videos yet. Tap Upload.</p>';
@@ -89,12 +89,15 @@ async function settings(a){
  let p={};try{const s=await getDoc(doc(db,'users',user.uid,'private','payout'));if(s.exists())p=s.data()}catch(x){}
  const f=(id,l,v,ph)=>'<label class="s">'+l+'</label><input id="'+id+'" value="'+esc(v||'')+'" placeholder="'+(ph||'')+'" style="'+IN+'">';
  await loadOwner();
+ try{const mm=await getDoc(doc(db,'users',user.uid));if(mm.exists())me=mm.data()}catch(x){}
+ const st=await stats2(user.uid);
+ const mon='<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':(me.monetizeRequest?'<span class="tag">Waiting for owner approval</span><p class="s">The owner will review your request.</p>':'<p class="s">You can ask for monetization at '+FMIN+' followers and '+VMIN+' views. You have '+st.f+' followers and '+st.v+' views. Until the owner approves your channel, ad earnings from your videos belong to Tube. After approval you earn 60% and Tube keeps 40%.</p>'+((st.f>=FMIN&&st.v>=VMIN)?'<button class="on" onclick="monetize()">Request monetization</button>':'<button disabled style="opacity:.5">Not eligible yet</button>')))+'</div>';
  const extra=(owner==='none'?'<div class="card"><h4>Owner</h4><p class="s">No owner is set yet. The first person to tap this becomes the Tube owner. Tap it now if you are the owner.</p><button class="on" onclick="claim()">I am the owner</button></div>':'')
- +(isOwner()?'<div class="card"><h4>Add free movie (owner)</h4>'+f('mt','Title')+f('mu','YouTube link, archive.org page link or direct https .mp4 link')+f('ml','License (e.g. Public Domain)')+'<select id="mc" style="'+IN+'"><option value="movie">Free movie (public domain / open license)</option><option value="cartoon">Cartoon (open license)</option><option value="pkdrama">Pakistani drama</option><option value="pkmovie">Pakistani movie</option><option value="pksong">Pakistani song</option><option value="inmovie">Indian movie</option><option value="insong">Indian song</option></select><button class="on" onclick="addMv()">Add</button><p class="s">For dramas, films and songs paste the link of the official YouTube video of its owner. It plays in the YouTube player. If it shows an error, the owner has switched embedding off, so pick another.</p></div>':'');
+ +(isOwner()?'<div class="card"><h4>Owner</h4><button class="on" onclick="go(\'owner\')">Open owner panel</button></div><div class="card"><h4>Add free movie (owner)</h4>'+f('mt','Title')+f('mu','YouTube link, archive.org page link or direct https .mp4 link')+f('ml','License (e.g. Public Domain)')+'<select id="mc" style="'+IN+'"><option value="movie">Free movie (public domain / open license)</option><option value="cartoon">Cartoon (open license)</option><option value="pkdrama">Pakistani drama</option><option value="pkmovie">Pakistani movie</option><option value="pksong">Pakistani song</option><option value="inmovie">Indian movie</option><option value="insong">Indian song</option></select><button class="on" onclick="addMv()">Add</button><p class="s">For dramas, films and songs paste the link of the official YouTube video of its owner. It plays in the YouTube player. If it shows an error, the owner has switched embedding off, so pick another.</p></div>':'');
  a.innerHTML='<div class="m"><button onclick="go(\'me\')">← Back</button><h3>Settings</h3></div>'
  +'<div class="card"><h4>Language</h4><div id="gtslot"></div><p class="s">Choose any language. Tube translates itself.</p></div>'
  +'<div class="card"><h4>Payment details</h4>'+f('ep','Easypaisa number',p.easypaisa,'03XX XXXXXXX')+f('jc','JazzCash number',p.jazzcash,'03XX XXXXXXX')+f('bk','Bank name (e.g. Meezan Bank)',p.bank)+f('bt','Account title',p.title)+f('ba','Account number / IBAN',p.account)+'<button class="on" onclick="savePay()">Save payment details</button></div>'
- +'<div class="card"><h4>Monetization</h4>'+(me.monetized?'<span class="tag g">Monetized</span><p class="s">Your channel earns 60% of ad money on your videos. Tube keeps 40%.</p>':'<p class="s">Needs at least 3 of your own videos and saved payment details. Then you earn 60% of ad money on your videos. Tube keeps 40%.</p><button class="on" onclick="monetize()">Request monetization</button>')+'</div>'
+ +mon
  +extra+'<div class="card"><h4>App</h4><div class="row"><button onclick="install()">Install Tube</button><button onclick="go(\'terms\')">Rules</button><button onclick="logout()">Sign out</button></div></div>';
  const g=$('gt');$('gtslot').appendChild(g);g.style.display='block'}
 
@@ -128,19 +131,20 @@ function terms(a){
  a.innerHTML='<div class="m"><button onclick="go(\'settings\')">← Back</button><h3>Tube rules</h3>'
  +'<p><b>Uploading</b></p><p class="s">Upload only videos you made yourself. Do not upload videos made by others, videos with other apps\' watermarks, or movies and cartoons you do not own. Adult, violent, hateful, misleading and unsafe content for children is not allowed. Videos can be up to 35 minutes and 100 MB.</p>'
  +'<p><b>Reports and removal</b></p><p class="s">Anyone can report a video. Videos that break these rules are removed. Repeated breaking of the rules turns off monetization for the channel.</p>'
- +'<p><b>Earning</b></p><p class="s">After monetization, the creator earns 60% of ad money on their videos and Tube keeps 40%. Fake views or clicking ads yourself means earnings are cancelled. Minimum withdrawal is Rs 1,000.</p>'
+ +'<p><b>Earning</b></p><p class="s">A channel can ask for monetization after 3,000 followers and 10,000 views, and the Tube owner approves requests. Until a channel is approved, ad earnings from its videos belong to Tube. After approval the creator earns 60% of ad money on their videos and Tube keeps 40%. Fake views or clicking ads yourself means earnings are cancelled. Minimum withdrawal is Rs 1,000.</p>'
  +'<p><b>Free movies and cartoons</b></p><p class="s">Free movies and cartoons are public domain or open license, with the license written under each title. Dramas, films and songs from YouTube play in the YouTube player. Their owners keep the views and earnings, and Tube does not copy or host them.</p>'
  +'<p><b>Privacy</b></p><p class="s">Your payment details are visible only to you and the Tube owner. Ads shown in Tube may use cookies.</p></div>'}
 
 
 // ---- likes, views, comments, share ----
 const seen=new Set();
-const vidHtml=(id,v)=>'<div id="v'+id+'"><video src="'+esc(v.url)+'" controls playsinline preload="metadata" onplay="viewed(\''+id+'\')"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'<span id="vw'+id+'"></span></div><div class="row"><button id="lk'+id+'" data-n="0" data-on="0" onclick="like(\''+id+'\')">Like</button><button onclick="cm(\''+id+'\')">Comments</button><button onclick="shr(\''+id+'\')">Share</button><button class="rp" onclick="rep(\''+id+'\')">Report</button></div><div id="cm'+id+'" hidden></div></div></div>';
+const vidHtml=(id,v)=>'<div id="v'+id+'"><video src="'+esc(v.url)+'" controls playsinline preload="metadata" onplay="viewed(\''+id+'\')"></video><div class="m"><b>'+esc(v.title)+'</b><div class="s">'+esc(v.name)+'<span id="vw'+id+'"></span></div><div class="row"><button id="lk'+id+'" data-n="0" data-on="0" onclick="like(\''+id+'\')">Like</button><button onclick="cm(\''+id+'\')">Comments</button><button onclick="shr(\''+id+'\')">Share</button><button class="rp" onclick="rep(\''+id+'\')">Report</button>'+(v.uid&&v.uid!=user.uid?'<button class="rp fol" data-u="'+esc(v.uid)+'" data-on="0" onclick="follow(\''+esc(v.uid)+'\')">Follow</button>':'')+'</div><div id="cm'+id+'" hidden></div></div></div>';
 function paintLike(id){const b=$('lk'+id);if(!b)return;const on=b.dataset.on=='1';b.textContent=(on?'Liked ':'Like ')+(b.dataset.n||0);b.className=on?'on':''}
 function stats(ids){ids.forEach(async id=>{try{
  const [l,w,m]=await Promise.all([getCountFromServer(collection(db,'videos',id,'likes')),getCountFromServer(collection(db,'videos',id,'views')),getDoc(doc(db,'videos',id,'likes',user.uid))]);
  const b=$('lk'+id);if(b){b.dataset.n=l.data().count;b.dataset.on=m.exists()?1:0;paintLike(id)}
- const w2=$('vw'+id);if(w2)w2.textContent=' - '+w.data().count+' views'}catch(e){}})}
+ const w2=$('vw'+id);if(w2)w2.textContent=' - '+w.data().count+' views';
+ const fb=document.querySelector('#v'+id+' .fol');if(fb){const fs=await getDoc(doc(db,'users',fb.dataset.u,'followers',user.uid));if(fs.exists()){fb.dataset.on='1';fb.textContent='Following'}}}catch(e){}})}
 window.viewed=async id=>{if(seen.has(id))return;seen.add(id);try{await setDoc(doc(db,'videos',id,'views',user.uid),{at:serverTimestamp()})}catch(e){}};
 window.like=async id=>{const b=$('lk'+id);let n=+b.dataset.n||0;const on=b.dataset.on=='1',r=doc(db,'videos',id,'likes',user.uid);
  try{if(on){await deleteDoc(r);n--}else{await setDoc(r,{at:serverTimestamp()});n++}b.dataset.n=n;b.dataset.on=on?0:1;paintLike(id)}catch(x){alert('Could not like: '+(x.code||x))}};
@@ -155,6 +159,44 @@ window.cm=async id=>{const p=$('cm'+id);if(!p.hidden){p.hidden=true;return}p.hid
 window.postCm=async id=>{const t=$('ci'+id).value.trim();if(!t)return;
  try{await addDoc(collection(db,'videos',id,'comments'),{uid:user.uid,name:me.name||nm(user),text:t.slice(0,300),createdAt:serverTimestamp()});await loadCm(id)}catch(x){alert('Could not post: '+(x.code||x))}};
 window.delCm=async(id,c)=>{try{await deleteDoc(doc(db,'videos',id,'comments',c));await loadCm(id)}catch(x){alert('Could not delete: '+(x.code||x))}};
+
+
+// ---- follow, stats, monetization, owner panel ----
+const FMIN=3000,VMIN=10000;
+window.follow=async u=>{const bs=[...document.querySelectorAll('.fol[data-u="'+u+'"]')];const on=bs[0]&&bs[0].dataset.on=='1',r=doc(db,'users',u,'followers',user.uid);
+ try{if(on)await deleteDoc(r);else await setDoc(r,{at:serverTimestamp()});bs.forEach(b=>{b.dataset.on=on?0:1;b.textContent=on?'Follow':'Following'})}catch(x){alert('Could not follow: '+(x.code||x))}};
+async function stats2(uid){let f=0,v=0,n=0;
+ try{const q=await getDocs(query(collection(db,'videos'),where('uid','==',uid)));n=q.size;const c=await Promise.all(q.docs.map(d=>getCountFromServer(collection(db,'videos',d.id,'views'))));v=c.reduce((a,x)=>a+x.data().count,0)}catch(e){}
+ try{f=(await getCountFromServer(collection(db,'users',uid,'followers'))).data().count}catch(e){}
+ return{f,v,n}}
+window.monetize=async()=>{const st=await stats2(user.uid);
+ if(st.f<FMIN||st.v<VMIN){alert('You need '+FMIN+' followers and '+VMIN+' views. You have '+st.f+' followers and '+st.v+' views.');return}
+ let p={};try{const q=await getDoc(doc(db,'users',user.uid,'private','payout'));if(q.exists())p=q.data()}catch(x){}
+ if(!(p.easypaisa||p.jazzcash||p.account)){alert('Save your payment details first.');return}
+ try{await setDoc(doc(db,'users',user.uid),{monetizeRequest:true,monetizeRequestedAt:serverTimestamp()},{merge:true});me.monetizeRequest=true;alert('Request sent to the owner.');go('settings')}catch(x){alert('Could not send request: '+(x.code||x))}};
+window.mzSet=async(id,on)=>{if(!confirm(on?'Approve monetization for this channel?':'Reject or stop monetization for this channel?'))return;
+ try{await setDoc(doc(db,'users',id),on?{monetized:true,monetizeRequest:false,monetizedAt:serverTimestamp()}:{monetized:false,monetizeRequest:false},{merge:true});go('owner')}catch(x){alert('Could not save: '+(x.code||x))}};
+window.ovDel=async(vid,rid)=>{if(!confirm('Delete this video?'))return;
+ try{await deleteDoc(doc(db,'videos',vid));if(rid)await deleteDoc(doc(db,'reports',rid));go('owner')}catch(x){alert('Could not delete: '+(x.code||x))}};
+window.rpDismiss=async rid=>{try{await deleteDoc(doc(db,'reports',rid));go('owner')}catch(x){alert('Could not dismiss: '+(x.code||x))}};
+async function ownerPanel(a){
+ await loadOwner();if(!isOwner()){a.innerHTML='<p class="m">Owner only.</p>';return}
+ a.innerHTML='<p class="m s">Loading…</p>';
+ let h='<div class="m"><button onclick="go(\'settings\')">← Back</button><h3>Owner panel</h3></div>',uc=0,vc=0;
+ try{uc=(await getCountFromServer(collection(db,'users'))).data().count;vc=(await getCountFromServer(collection(db,'videos'))).data().count}catch(e){}
+ h+='<div class="card"><h4>Overview</h4><div class="row"><span class="tag">'+uc+' users</span><span class="tag">'+vc+' videos</span></div></div>';
+ let rq=[],mz=[];
+ try{const q=await getDocs(query(collection(db,'users'),where('monetizeRequest','==',true)));q.forEach(d=>rq.push({id:d.id,...d.data()}))}catch(e){}
+ try{const q=await getDocs(query(collection(db,'users'),where('monetized','==',true)));q.forEach(d=>mz.push({id:d.id,...d.data()}))}catch(e){}
+ const rs=await Promise.all(rq.map(r=>stats2(r.id)));
+ h+='<div class="card"><h4>Monetization requests ('+rq.length+')</h4>'+(rq.length?rq.map((r,i)=>'<div class="mv"><span>'+esc(r.name||'User')+'<br><span class="s">'+rs[i].f+' followers, '+rs[i].v+' views</span></span><span><button class="on" onclick="mzSet(\''+r.id+'\',true)">Approve</button> <button onclick="mzSet(\''+r.id+'\',false)">Reject</button></span></div>').join(''):'<p class="s">No requests.</p>')+'</div>';
+ h+='<div class="card"><h4>Monetized channels ('+mz.length+')</h4>'+(mz.length?mz.map(r=>'<div class="mv"><span>'+esc(r.name||'User')+'</span><button onclick="mzSet(\''+r.id+'\',false)">Stop</button></div>').join(''):'<p class="s">None yet.</p>')+'</div>';
+ let rp=[];try{const q=await getDocs(query(collection(db,'reports'),limit(30)));q.forEach(d=>rp.push({id:d.id,...d.data()}))}catch(e){}
+ const rv=await Promise.all(rp.map(r=>getDoc(doc(db,'videos',r.video)).catch(()=>null)));
+ h+='<div class="card"><h4>Reports ('+rp.length+')</h4>'+(rp.length?rp.map((r,i)=>{const ok=rv[i]&&rv[i].exists();return '<div class="mv"><span>'+(ok?esc(rv[i].data().title):'Video already removed')+'</span><span>'+(ok?'<button class="on" onclick="ovDel(\''+r.video+'\',\''+r.id+'\')">Delete video</button> ':'')+'<button onclick="rpDismiss(\''+r.id+'\')">Dismiss</button></span></div>'}).join(''):'<p class="s">No reports.</p>')+'</div>';
+ let vl=[];try{const q=await getDocs(query(collection(db,'videos'),orderBy('createdAt','desc'),limit(20)));q.forEach(d=>vl.push({id:d.id,...d.data()}))}catch(e){}
+ h+='<div class="card"><h4>Latest videos</h4>'+(vl.length?vl.map(v=>'<div class="mv"><span>'+esc(v.title)+'<br><span class="s">'+esc(v.name)+'</span></span><button onclick="ovDel(\''+v.id+'\',\'\')">Delete</button></div>').join(''):'<p class="s">No videos.</p>')+'</div>';
+ a.innerHTML=h}
 
 window.go=async t=>{
  const a=$('app'),g=$('gt');if(g.parentNode!==document.body){g.style.display='none';document.body.appendChild(g)}
@@ -175,6 +217,7 @@ window.go=async t=>{
  if(t=='settings'){await settings(a);return}
  if(t=='mv'){await movies(a);return}
  if(t=='terms'){terms(a);return}
+ if(t=='owner'){await ownerPanel(a);return}
  await profile(a)};
 $('file').onchange=e=>{const f=e.target.files[0];e.target.value='';if(!f)return;
  const v=document.createElement('video');v.preload='metadata';
